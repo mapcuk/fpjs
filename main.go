@@ -123,7 +123,6 @@ func prioritize(transactions []Transaction, totalTimeMs int) []Transaction {
 			}
 		}
 	}
-	log.Printf("max sum = %4.1f", table[count][totalTimeMs])
 
 	var prioritized []Transaction
 	j := totalTimeMs
