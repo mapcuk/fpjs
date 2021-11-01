@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -67,18 +66,6 @@ type Transaction struct {
 	BankCountryCode string
 }
 
-type TransactionsByAmount []Transaction
-
-func (transactions TransactionsByAmount) Len() int {
-	return len(transactions)
-}
-func (transactions TransactionsByAmount) Swap(i, j int) {
-	transactions[i], transactions[j] = transactions[j], transactions[i]
-}
-func (transactions TransactionsByAmount) Less(i, j int) bool {
-	return transactions[i].Amount < transactions[j].Amount
-}
-
 type TransactionStatus struct {
 	// a UUID of transaction
 	ID string
@@ -105,22 +92,48 @@ func processTransaction(transaction Transaction) bool {
 	return false
 }
 
-// function should return a subset (or full array)
-// that will maximize the USD value and fit the transactions under 1 second
+// Common Knapsack problem 0-1, dynamic programming approach
 func prioritize(transactions []Transaction, totalTimeMs int) []Transaction {
-	sort.Sort(sort.Reverse(TransactionsByAmount(transactions)))
-	requiredTimeMS := 0
-	for index, transaction := range transactions {
-		if latency, exists := ApiLatencies[transaction.BankCountryCode]; exists {
-			requiredTimeMS += latency
-		} else {
+	count := len(transactions)
+	table := make([][]float32, count+1)
+	for index := range table {
+		table[index] = make([]float32, totalTimeMs+1)
+	}
+
+	latencies := make([]int, count+1)
+	for i := 0; i < count; i++ {
+		transaction := transactions[i]
+		latency, exists := ApiLatencies[transaction.BankCountryCode]
+		if !exists {
 			log.Printf("unknown latency for country %s", transaction.BankCountryCode)
+			latency = totalTimeMs // let's consider this transaction takes max time
 		}
-		if requiredTimeMS > totalTimeMs {
-			return transactions[:index]
+		latencies[i] = latency
+		for j := 0; j <= totalTimeMs; j++ {
+			if latency > j {
+				table[i+1][j] = table[i][j]
+			} else {
+				maxAmount := table[i][j-latency] + transaction.Amount
+
+				if maxAmount > table[i][j] {
+					table[i+1][j] = maxAmount
+				} else {
+					table[i+1][j] = table[i][j]
+				}
+			}
 		}
 	}
-	return transactions
+	log.Printf("max sum = %4.1f", table[count][totalTimeMs])
+
+	var prioritized []Transaction
+	j := totalTimeMs
+	for i := count; i > 0; i-- {
+		if table[i][j] > table[i-1][j] {
+			prioritized = append(prioritized, transactions[i-1])
+			j = j - latencies[i-1]
+		}
+	}
+	return prioritized
 }
 
 func recordToTransaction(record []string) Transaction {
