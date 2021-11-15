@@ -1,37 +1,42 @@
 package main
 
 import (
-	"math/rand"
-	"strconv"
 	"testing"
-	"time"
 )
 
-func genTransactions(n int) []Transaction {
-	results := make([]Transaction, n)
-	for x := 0; x < n; x++ {
-		results[x] = Transaction{
-			ID:              strconv.Itoa(x),
-			Amount:          rand.Float32() * 1000,
-			BankName:        "Street24",
-			BankCountryCode: "us", //10 ms latency
-		}
-	}
-	return results
-}
-
 func Test_prioritize(t *testing.T) {
-	rand.Seed(time.Now().UnixNano())
-	totalTimeMS := 200
-	numExpectedRecords := totalTimeMS / 10 //each transaction makes API call to US with latency 10ms
-	trscs := genTransactions(numExpectedRecords + 1)
+	trscs := []Transaction{{
+		ID:              "001",
+		Amount:          190,
+		BankName:        "Street24",
+		BankCountryCode: "au", //250 ms latency
+	}, {
+		ID:              "002",
+		Amount:          250,
+		BankName:        "Street24",
+		BankCountryCode: "ae", //80 ms latency
+	}, {
+		ID:              "003",
+		Amount:          170,
+		BankName:        "Street24",
+		BankCountryCode: "vn", //129 ms latency
+	}, {
+		ID:              "004",
+		Amount:          150,
+		BankName:        "Street24",
+		BankCountryCode: "fj", //360 ms latency
+	}}
+	totalTimeMS := 500
+	numExpectedRecords := 3
 
 	result := prioritize(trscs, totalTimeMS)
 	resultTimeMS := 0
 	for _, t := range result {
 		resultTimeMS += ApiLatencies[t.BankCountryCode]
 	}
-	t.Logf("Total time %d", resultTimeMS)
+	if resultTimeMS > totalTimeMS {
+		t.Errorf("Got transactions which takes %d ms (more than %d)", resultTimeMS, totalTimeMS)
+	}
 	if len(result) != numExpectedRecords {
 		t.Errorf("Got %d records, want %d", len(result), numExpectedRecords)
 	}
